@@ -8,148 +8,76 @@ A microservices-based chatbot that serves as a smart e-commerce assistant, capab
 - **Order Lookup**: Retrieve order details by customer ID
 - **RAG Integration**: Uses Retrieval-Augmented Generation for accurate responses
 - **Microservices Architecture**: Modular design with separate services
+- **Caching**: Implements TTL caching for frequently requested queries
+- **Hybrid Search**: Combines semantic search with keyword fallback for reliability
+- **Price Analysis**: Provides average price information for product searches
 
 ## Project Structure
 
 ```
 ecommerce_challenge/
 ├── product_service/ - Handles product search and retrieval
+│   ├── app.py - Main Flask application
+│   ├── product_retriever.py - Product search implementation
+│   ├── create_index.py - Simple FAISS index creation
+│   ├── embeddings.py - Memory-efficient FAISS index creation
+│   └── Dockerfile
 ├── order_service/ - Manages order information
+│   ├── app.py - Order service API
+│   ├── mock_api_client.py - Mock API for order data
+│   └── Dockerfile
 ├── chat_service/ - Main interface for user interaction
+│   ├── app.py - Chat service implementation
+│   ├── rag_handler.py - Response generation
+│   ├── templates/ - HTML templates
+│   ├── static/ - CSS and JS files
+│   └── Dockerfile
 ├── data/ - Contains product and order datasets
+│   ├── Order_Data_Dataset.csv
+│   └── Product_Information_Dataset.csv
 ├── tests/ - Unit tests for all services
+└── docker-compose.yml - Docker configuration
 ```
 
 ## Setup and Installation
 
 ### Prerequisites
+- Docker and Docker Compose
 - Python 3.9+
-- Fly.io account
 
-### Setting up Fly.io
+### Running with Docker
 
-1. **Install the Fly.io CLI**:
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/ecommerce-challenge.git
+cd ecommerce-challenge
+```
 
-   **macOS**:
-   ```bash
-   # Using Homebrew
-   brew install flyctl
-   
-   # Or using curl
-   curl -L https://fly.io/install.sh | sh
-   ```
+2. Build and start the services:
+```bash
+docker-compose up --build
+```
 
-   **Linux**:
-   ```bash
-   curl -L https://fly.io/install.sh | sh
-   ```
+3. Access the UI at: http://localhost:8002
 
-   **Windows**:
-   ```powershell
-   pwsh -Command "iwr https://fly.io/install.ps1 -useb | iex"
-   ```
-   
-   If `pwsh` is not found, you can use `powershell` instead.
-
-2. **Login to Fly.io**:
-   ```bash
-   # Login to existing account
-   fly auth login
-   
-   # Or sign up for a new account
-   fly auth signup
-   ```
-
-3. **Create Fly.io Volumes**:
-   ```bash
-   # Create volume for product data
-   fly volumes create product_data --size 1 --app ecommerce-product-service
-
-   # Create volume for order data
-   fly volumes create order_data --size 1 --app ecommerce-order-service
-   ```
-
-4. **Copy Data to Volumes**:
-   ```bash
-   # Copy product data
-   fly ssh sftp shell -a ecommerce-product-service
-   # Then use put command to upload Product_Information_Dataset.csv to /data/
-
-   # Copy order data
-   fly ssh sftp shell -a ecommerce-order-service
-   # Then use put command to upload Order_Data_Dataset.csv to /data/
-   ```
-
-## Deployment on Fly.io
-
-1. **Deploy Services**:
-   ```bash
-   # Deploy product service
-   cd product_service
-   fly launch --image flyio/hellofly:latest
-   # Follow the prompts to configure your app
-   
-   # Deploy order service
-   cd ../order_service
-   fly launch --image flyio/hellofly:latest
-   
-   # Deploy chat service
-   cd ../chat_service
-   fly launch --image flyio/hellofly:latest
-   ```
-
-2. **Update Environment Variables**:
-   ```bash
-   # For chat service, set URLs of other services
-   fly secrets set PRODUCT_SERVICE_URL=https://ecommerce-product-service.fly.dev \
-                   ORDER_SERVICE_URL=https://ecommerce-order-service.fly.dev \
-                   -a ecommerce-chat-service
-   ```
-
-3. **Access the UI**:
-   Visit `https://ecommerce-chat-service.fly.dev` to interact with the chatbot.
-
-## Setting up VS Code Remote Development with Fly.io
-
-1. **Install VS Code Remote SSH Extension**:
-   - Open VS Code
-   - Go to Extensions (Ctrl+Shift+X)
-   - Search for "Remote - SSH" and install it
-
-2. **Configure SSH Access to Fly App**:
-   ```bash
-   # Create SSH keys if you don't have them
-   ssh-keygen -t ed25519 -C "your_email@example.com"
-   
-   # Add your SSH key to Fly.io
-   fly ssh establish
-   ```
-
-3. **Connect to Your Fly.io App**:
-   - Open VS Code
-   - Press Ctrl+Shift+P (or Cmd+Shift+P on macOS)
-   - Type "Remote-SSH: Connect to Host" and select it
-   - Enter the connection string: `fly-v2-app@ecommerce-product-service.internal`
-   - Select the platform (Linux)
-   - Enter your SSH key passphrase if prompted
-
-4. **Start Developing**:
-   - VS Code will connect to your Fly.io app
-   - You can now edit files, run commands, and debug directly on the remote machine
+4. Create the FAISS index for improved product search:
+```bash
+docker-compose exec product-service python create_index.py
+```
 
 ## API Endpoints
 
-### Product Service
+### Product Service (port 8000)
 - `GET /health` - Health check
 - `POST /search` - Search for products
 - `GET /product/` - Get product by ASIN
 
-### Order Service
+### Order Service (port 8001)
 - `GET /health` - Health check
 - `GET /orders/` - Get orders for a customer
 - `GET /orders/priority/` - Get orders by priority
 
-### Chat Service
+### Chat Service (port 8002)
 - `GET /health` - Health check
 - `GET /` - Web UI
 - `POST /chat` - Process chat messages
@@ -166,52 +94,48 @@ ecommerce_challenge/
 - "What's the status of my order? My ID is 41066"
 - "Show me my recent orders. Customer ID 53639"
 
-## Testing
+## Implementation Details
 
-Run the tests with:
-```bash
-python -m pytest tests/
-```
+### Product Service
+The product service uses a hybrid search approach:
+1. First attempts semantic search using FAISS
+2. Falls back to keyword search if FAISS search fails
+3. Implements caching for frequently requested queries
 
-## Implementation Process
+### Order Service
+The order service provides:
+1. Customer order lookup by ID
+2. Order filtering by priority
+3. Error handling for CSV parsing issues
 
-1. **Data Analysis**: Analyzed product and order datasets to understand structure
-2. **Architecture Design**: Designed microservices architecture
-3. **RAG Implementation**: Implemented semantic search with FAISS
-4. **API Development**: Created RESTful APIs for each service
-5. **UI Development**: Built a simple web interface
-6. **Testing**: Added comprehensive test suite
-7. **Deployment**: Configured Fly.io for easy deployment
+### Chat Service
+The chat service:
+1. Classifies user intent (product vs. order queries)
+2. Routes requests to appropriate microservices
+3. Formats responses using templates
+4. Provides price analysis for product searches
 
-## Troubleshooting
+## Optimizations
 
-- If you encounter issues with Fly.io deployment, check the logs with:
-  ```bash
-  fly logs -a 
-  ```
+- **Memory Efficiency**: Batch processing for FAISS index creation
+- **Performance**: TTL caching for frequent queries
+- **Reliability**: Hybrid search with fallback mechanisms
+- **User Experience**: Detailed product information with price analysis
 
-- For SSH connection issues, verify your SSH keys are properly set up:
-  ```bash
-  fly ssh issue --agent
-  ```
+## Dependencies
 
-- To restart an app after configuration changes:
-  ```bash
-  fly apps restart 
-  ```
+Main dependencies include:
+- Flask 3.0.2
+- pandas 2.2.1
+- langchain 0.1.16
+- sentence-transformers 2.5.0
+- faiss-cpu 1.8.0
+- cachetools 5.3.2
 
-## Time Tracking
+## Future Improvements
 
-The project was completed according to the following timeline:
-- Project Setup: 1.5 hours
-- Data Analysis: 4 hours
-- Architecture Design: 2.5 hours
-- FAISS Index Creation: 1.2 hours
-- Product Service Implementation: 5 hours
-- Order Service Implementation: 2.5 hours
-- Chat Service Implementation: 7 hours
-- UI Development: 4 hours
-- Testing: 5 hours
-- Fly.io Deployment: 3 hours
-- Documentation: 1.5 hours
-- Bonus Features: 6 hours
+- Implement user authentication
+- Add product recommendation system
+- Enhance search with filters (price, category, etc.)
+- Implement full-text search for product descriptions
+- Add conversational context tracking

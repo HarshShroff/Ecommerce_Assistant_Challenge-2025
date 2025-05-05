@@ -21,13 +21,13 @@ class ChatHandler:
         """Generate a response for product queries using the retrieved products"""
         if not products:
             return self.product_templates["no_results"]
-            
+                
         if len(products) == 1:
             product = products[0]
             features = ""
             if product.get('features') and len(product['features']) > 0:
                 features = f"Some key features include: {'; '.join(product['features'][:2])}"
-                
+                    
             return self.product_templates["single_result"].format(
                 title=product['title'],
                 price=product['price'],
@@ -40,9 +40,15 @@ class ChatHandler:
         for i, product in enumerate(products[:5], 1):
             product_list.append(f"{i}. {product['title']} - ${product['price']} (Rating: {product['rating']}/5)")
         
+        # Add price analysis
+        prices = [float(p['price']) for p in products]
+        avg_price = sum(prices) / len(prices)
+        price_analysis = f"\nThe average price of these products is ${avg_price:.2f}."
+        
         return self.product_templates["multiple_results"].format(
             products="\n".join(product_list)
-        )
+        ) + price_analysis
+
     
     def generate_order_response(self, order_data, query):
         """Generate a response for order queries using the retrieved order data"""
