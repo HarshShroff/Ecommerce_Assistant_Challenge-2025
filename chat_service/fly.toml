@@ -1,0 +1,28 @@
+# fly.toml app configuration file generated for ecommerce-chat-service-billowing-snowflake-2955 on 2025-05-05T14:16:38-04:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'ecommerce-chat-service-billowing-snowflake-2955'
+primary_region = 'iad'
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ORDER_SERVICE_URL = 'https://ecommerce-order-service.fly.dev'
+  PORT = '8080'
+  PRODUCT_SERVICE_URL = 'https://ecommerce-product-service.fly.dev'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1

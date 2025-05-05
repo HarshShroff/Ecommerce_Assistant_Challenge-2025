@@ -1,0 +1,74 @@
+from flask import Flask, jsonify, request
+import pandas as pd
+import logging
+import re
+import os
+from mock_api_client import get_order_details
+
+app = Flask(__name__)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Load the order dataset
+try:
+    orders_df = pd.read_csv('/data/Order_Data_Dataset.csv')
+    logger.info(f"Loaded {len(orders_df)} orders from dataset")
+except Exception as e:
+    logger.error(f"Error loading order dataset: {e}")
+    orders_df = pd.DataFrame()
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({"status": "healthy"})
+
+@app.route('/orders/<customer_id>', methods=['GET'])
+def get_orders(customer_id):
+    try:
+        # Validate customer ID format
+        if not re.match(r'^\d+$', customer_id):
+            return jsonify({"error": "Invalid customer ID format"}), 400
+            
+        customer_id = int(customer_id)
+        logger.info(f"Retrieving orders for customer ID: {customer_id}")
+        
+        # Use the mock API to get order details
+        orders = get_order_details(customer_id)
+        
+        if orders.empty:
+            return jsonify({"error": "No orders found for this customer"}), 404
+            
+        # Sort by date (most recent first)
+        orders = orders.sort_values(by='Order_Date', ascending=False)
+        
+        return jsonify({
+            'customer_id': customer_id,
+            'orders': orders.to_dict(orient='records')
+        })
+    except Exception as e:
+        logger.error(f"Error retrieving orders: {e}")
+        return jsonify({"error": "Failed to retrieve order information"}), 500
+
+@app.route('/orders/priority/<priority>', methods=['GET'])
+def get_priority_orders(priority):
+    valid_priorities = ['Low', 'Medium', 'High', 'Critical']
+    if priority.capitalize() not in valid_priorities:
+        return jsonify({'error': 'Invalid priority level'}), 400
+        
+    try:
+        logger.info(f"Retrieving orders with priority: {priority}")
+        filtered = orders_df[orders_df['Order_Priority'] == priority.capitalize()]
+        
+        # Sort by date (most recent first)
+        filtered = filtered.sort_values(by='Order_Date', ascending=False)
+        
+        if filtered.empty:
+            return jsonify({"message": "No orders found with this priority"}), 404
+            
+        return jsonify(filtered.head(5).to_dict(orient='records'))
+    except Exception as e:
+        logger.error(f"Error retrieving priority orders: {e}")
+        return jsonify({"error": "Failed to retrieve priority orders"}), 500
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)

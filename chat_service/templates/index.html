@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Commerce Assistant</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>E-Commerce Assistant</h1>
+            <p>Ask me about products or your orders!</p>
+        </div>
+        
+        <div class="chat-messages" id="chat-history">
+            <div class="message bot">
+                <div class="message-content">
+                    Hello! I'm your E-Commerce Assistant. I can help you find products or check your order status. What would you like to know?
+                </div>
+            </div>
+        </div>
+        
+        <div class="input-container">
+            <input type="text" id="user-input" placeholder="Ask about products or orders...">
+            <button onclick="sendMessage()" id="send-button">Send</button>
+        </div>
+        
+        <div class="sample-queries">
+            <p>Sample queries:</p>
+            <ul>
+                <li><a href="#" onclick="fillQuery('What are the top rated guitar strings?')">What are the top rated guitar strings?</a></li>
+                <li><a href="#" onclick="fillQuery('Show me microphones under $30')">Show me microphones under $30</a></li>
+                <li><a href="#" onclick="fillQuery('Check my order with customer ID 37077')">Check my order with customer ID 37077</a></li>
+            </ul>
+        </div>
+    </div>
+    
+    <script>
+        // Add event listener for Enter key
+        document.getElementById('user-input').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        function fillQuery(text) {
+            document.getElementById('user-input').value = text;
+        }
+        
+        async function sendMessage() {
+            const input = document.getElementById('user-input');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Disable input while processing
+            input.disabled = true;
+            document.getElementById('send-button').disabled = true;
+            
+            // Add user message to chat
+            addMessage(message, 'user');
+            
+            // Add typing indicator
+            const typingIndicator = addTypingIndicator();
+            
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: message})
+                });
+                
+                const data = await response.json();
+                
+                // Remove typing indicator
+                typingIndicator.remove();
+                
+                // Add bot response
+                addMessage(data.response, 'bot');
+            } catch (error) {
+                // Remove typing indicator
+                typingIndicator.remove();
+                
+                // Add error message
+                addMessage("Sorry, I encountered an error. Please try again.", 'bot');
+                console.error('Error:', error);
+            }
+            
+            // Re-enable input
+            input.disabled = false;
+            document.getElementById('send-button').disabled = false;
+            input.value = '';
+            input.focus();
+        }
+        
+        function addMessage(text, sender) {
+            const chatHistory = document.getElementById('chat-history');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = text;
+            
+            messageDiv.appendChild(contentDiv);
+            chatHistory.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+            
+            return messageDiv;
+        }
+        
+        function addTypingIndicator() {
+            const chatHistory = document.getElementById('chat-history');
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'message bot typing';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+            
+            typingDiv.appendChild(contentDiv);
+            chatHistory.appendChild(typingDiv);
+            
+            // Scroll to bottom
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+            
+            return typingDiv;
+        }
+    </script>
+</body>
+</html>
