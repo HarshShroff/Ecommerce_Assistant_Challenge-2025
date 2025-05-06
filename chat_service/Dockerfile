@@ -7,11 +7,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
-ENV PRODUCT_SERVICE_URL=https://ecommerce-product-service-green-haze-6364.fly.dev/
-ENV ORDER_SERVICE_URL=https://ecommerce-order-service-morning-dawn-9468.fly.dev/
+ENV PRODUCT_SERVICE_URL=${PRODUCT_SERVICE_URL}
+ENV ORDER_SERVICE_URL=${ORDER_SERVICE_URL}
 
 EXPOSE 8080
 

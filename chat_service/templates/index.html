@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>E-Commerce Assistant</title>
-    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
     <div class="chat-container">
@@ -22,97 +22,133 @@
         </div>
         
         <div class="input-container">
-            <input type="text" id="user-input" placeholder="Ask about products or orders...">
+            <input type="text" id="user-input" placeholder="Ask about products or orders..." autofocus>
             <button onclick="sendMessage()" id="send-button">Send</button>
         </div>
         
         <div class="sample-queries">
             <p>Sample queries:</p>
             <ul>
-                <li><a href="#" onclick="fillQuery('What are the top rated guitar strings?')">What are the top rated guitar strings?</a></li>
-                <li><a href="#" onclick="fillQuery('Show me microphones under $30')">Show me microphones under $30</a></li>
-                <li><a href="#" onclick="fillQuery('Check my order with customer ID 37077')">Check my order with customer ID 37077</a></li>
+                <li><a href="#" onclick="fillQueryAndSend('What are the top rated guitar strings?')">Top rated guitar strings?</a></li>
+                <li><a href="#" onclick="fillQueryAndSend('Show me microphones under $30')">Microphones under $30</a></li>
+                <li><a href="#" onclick="fillQueryAndSend('What are the details of my last order?')">My last order?</a></li>
+                <li><a href="#" onclick="fillQueryAndSend('Fetch 5 most recent high-priority orders.')">Recent high-priority orders?</a></li>
             </ul>
         </div>
     </div>
     
     <script>
-        // Add event listener for Enter key
+        let sessionId = localStorage.getItem('sessionId');
+        if (!sessionId) {
+            sessionId = generateUUID();
+            localStorage.setItem('sessionId', sessionId);
+            console.log("Generated new Session ID:", sessionId);
+        } else {
+            console.log("Using existing Session ID:", sessionId);
+        }
+
+
+        function generateUUID() { 
+            var d = new Date().getTime();
+            var d2 = ((typeof performance !== 'undefined') && performance.now && (performance.now()*1000)) || 0;
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16;
+                if(d > 0){
+                    r = (d + r)%16 | 0;
+                    d = Math.floor(d/16);
+                } else {
+                    r = (d2 + r)%16 | 0;
+                    d2 = Math.floor(d2/16);
+                }
+                return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+            });
+        }
+
         document.getElementById('user-input').addEventListener('keypress', function(event) {
             if (event.key === 'Enter') {
                 sendMessage();
             }
         });
-        
-        function fillQuery(text) {
+
+        function fillQueryAndSend(text) {
             document.getElementById('user-input').value = text;
+            sendMessage(); 
         }
-        
+        function fillQuery(text) { 
+             document.getElementById('user-input').value = text;
+        }
+
+
         async function sendMessage() {
             const input = document.getElementById('user-input');
             const message = input.value.trim();
             
             if (!message) return;
             
-            // Disable input while processing
+            if (!sessionId || sessionId === "null" || sessionId === "None") {
+                sessionId = generateUUID();
+                localStorage.setItem('sessionId', sessionId);
+                console.log("Regenerated Session ID before send:", sessionId);
+            }
+
             input.disabled = true;
             document.getElementById('send-button').disabled = true;
+            addMessageToUI(message, 'user');
+            const typingIndicator = addTypingIndicatorToUI();
             
-            // Add user message to chat
-            addMessage(message, 'user');
-            
-            // Add typing indicator
-            const typingIndicator = addTypingIndicator();
-            
+            console.log("Sending message with Session ID:", sessionId);
+
             try {
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({message: message})
+                    body: JSON.stringify({
+                        message: message,
+                        session_id: sessionId // Send the current session ID
+                    })
                 });
                 
                 const data = await response.json();
+
+                if (data.session_id && data.session_id !== sessionId) {
+                    console.log("Session ID updated by backend:", data.session_id);
+                    sessionId = data.session_id;
+                    localStorage.setItem('sessionId', sessionId);
+                } else if (!data.session_id) {
+                    console.warn("Backend did not return a session_id in response.");
+                }
                 
-                // Remove typing indicator
                 typingIndicator.remove();
-                
-                // Add bot response
-                addMessage(data.response, 'bot');
+                addMessageToUI(data.response, 'bot');
+
             } catch (error) {
-                // Remove typing indicator
                 typingIndicator.remove();
-                
-                // Add error message
-                addMessage("Sorry, I encountered an error. Please try again.", 'bot');
-                console.error('Error:', error);
+                addMessageToUI("Sorry, I couldn't connect. Please try again.", 'bot');
+                console.error('Error sending message:', error);
             }
             
-            // Re-enable input
             input.disabled = false;
             document.getElementById('send-button').disabled = false;
             input.value = '';
             input.focus();
         }
         
-        function addMessage(text, sender) {
+        function addMessageToUI(text, sender) {
             const chatHistory = document.getElementById('chat-history');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${sender}`;
             
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content';
-            contentDiv.textContent = text;
+            contentDiv.textContent = text; 
             
             messageDiv.appendChild(contentDiv);
             chatHistory.appendChild(messageDiv);
-            
-            // Scroll to bottom
             chatHistory.scrollTop = chatHistory.scrollHeight;
-            
             return messageDiv;
         }
         
-        function addTypingIndicator() {
+        function addTypingIndicatorToUI() {
             const chatHistory = document.getElementById('chat-history');
             const typingDiv = document.createElement('div');
             typingDiv.className = 'message bot typing';
@@ -123,10 +159,7 @@
             
             typingDiv.appendChild(contentDiv);
             chatHistory.appendChild(typingDiv);
-            
-            // Scroll to bottom
             chatHistory.scrollTop = chatHistory.scrollHeight;
-            
             return typingDiv;
         }
     </script>

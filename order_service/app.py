@@ -9,9 +9,7 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load the order dataset
 try:
-    # Use the absolute path for Docker container
     orders_df_global = pd.read_csv('../data/Order_Data_Dataset.csv', on_bad_lines='skip')
     logger.info(f"Loaded {len(orders_df_global)} orders from global dataset")
 except Exception as e:
@@ -20,25 +18,24 @@ except Exception as e:
 
 @app.route('/health', methods=['GET'])
 def health_check():
+    """Performs a health check."""
     return jsonify({"status": "healthy"})
 
 @app.route('/orders/<customer_id>', methods=['GET'])
 def get_orders(customer_id):
+    """Retrieves orders for a given customer ID."""
     try:
-        # Validate customer ID format
         if not re.match(r'^\d+$', customer_id):
             return jsonify({"error": "Invalid customer ID format"}), 400
             
         customer_id_int = int(customer_id)
         logger.info(f"Retrieving orders for customer ID: {customer_id_int}")
         
-        # Use the mock API to get order details
         orders = get_order_details(customer_id_int)
         
         if orders.empty:
             return jsonify({"error": f"No orders found for customer ID {customer_id_int}"}), 404
             
-        # Sort by date (most recent first)
         orders = orders.sort_values(by='Order_Date', ascending=False)
         
         return jsonify({
@@ -51,6 +48,7 @@ def get_orders(customer_id):
 
 @app.route('/orders/priority/<priority>', methods=['GET'])
 def get_priority_orders(priority):
+    """Retrieves orders for a given priority level."""
     valid_priorities = ['Low', 'Medium', 'High', 'Critical']
     if priority.capitalize() not in valid_priorities:
         return jsonify({'error': 'Invalid priority level'}), 400
@@ -59,7 +57,6 @@ def get_priority_orders(priority):
         logger.info(f"Retrieving orders with priority: {priority}")
         filtered = orders_df_global[orders_df_global['Order_Priority'] == priority.capitalize()]
         
-        # Sort by date (most recent first)
         filtered = filtered.sort_values(by='Order_Date', ascending=False)
         
         if filtered.empty:
