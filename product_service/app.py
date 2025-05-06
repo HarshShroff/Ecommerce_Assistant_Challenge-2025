@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 # Initialize the product retriever
 retriever = ProductRetriever()
+
 # Cache for frequently requested queries
 cache = TTLCache(maxsize=1000, ttl=300)
 
@@ -39,6 +40,7 @@ def product_search():
         top_k=top_k,
         min_rating=min_rating
     )
+    
     response = [prod.to_dict() for prod in results]
     cache[cache_key] = response
     return jsonify(response)
