@@ -41,8 +41,22 @@ def product_search():
         min_rating=min_rating
     )
     
-    response = [prod.to_dict() for prod in results]
-    cache[cache_key] = response
+    response = []
+    for item in results:
+        if hasattr(item, "to_dict"):
+            # Product instance
+            response.append(item.to_dict())
+        elif isinstance(item, dict):
+            # Already a dict
+            response.append(item)
+        else:
+            # Fallback: try its __dict__
+            try:
+                response.append(item.__dict__)
+            except Exception:
+                # As last resort, string‑ify
+                response.append({"value": str(item)})
+
     return jsonify(response)
 
 @app.route('/product/<asin>', methods=['GET'])

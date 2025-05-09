@@ -102,107 +102,75 @@ class ProductRetriever:
         self.index = FAISS.from_texts(documents, self.encoder, metadatas=metadatas)
         os.makedirs(self.index_path, exist_ok=True)
         self.index.save_local(self.index_path)
-    
+
     def search(self, query: str, top_k=5, min_rating=4.0):
+        """
+        Perform a semantic + reranked search, falling back to keyword matching.
+        """
         try:
-            logger.info(f"Searching for exact phrase: '{query.lower()}'")
-            
-            # Check if DataFrame is empty
             if self.df.empty:
                 logger.error("Product DataFrame is empty, cannot perform search")
                 return []
-                
+
             query_lower = query.lower()
-            exact_phrase_results = []
 
-            # 1. Prioritize exact phrase matches first
-            for _, row in self.df.iterrows():
-                title = str(row['title']).lower() if not pd.isna(row['title']) else ""
-                # Check for exact phrase and minimum rating
-                if query_lower in title and float(row['average_rating']) >= min_rating:
-                    try:
-                        exact_phrase_results.append(Product(
-                            asin=row['parent_asin'],
-                            title=row['title'],
-                            price=float(row['price']),
-                            rating=float(row['average_rating']),
-                            categories=self._parse_list(row['categories']),
-                            features=self._parse_list(row['features']),
-                            description=str(row['description']) if not pd.isna(row['description']) else None
-                        ))
-                        if len(exact_phrase_results) >= top_k:
-                            break
-                    except Exception as e:
-                        logger.error(f"Error creating product for exact match: {e}")
+            # 1) FAISS semantic search (k×3 candidates)
+            logger.info(f"Performing FAISS semantic search for: '{query}'")
+            docs = self.index.similarity_search(query, k=top_k * 3)
+            asins = [doc.metadata["asin"] for doc in docs]
 
-            if exact_phrase_results:
-                logger.info(f"Found {len(exact_phrase_results)} exact phrase matches")
-                return exact_phrase_results
+            # Filter by rating
+            candidates = self.df[
+                (self.df["parent_asin"].isin(asins)) &
+                (self.df["average_rating"] >= min_rating)
+            ]
 
-            # 2. If no exact phrase matches, try FAISS semantic search
-            logger.info("No exact phrase match found, trying FAISS semantic search")
-            if hasattr(self, 'index') and self.index:
-                try:
-                    docs = self.index.similarity_search(query, k=top_k*3)
-                    asins = [doc.metadata['asin'] for doc in docs]
-                    faiss_results = self.df[self.df['parent_asin'].isin(asins)]
-                    faiss_results = faiss_results[faiss_results['average_rating'] >= min_rating]
-                    
-                    if not faiss_results.empty:
-                        # Score based on term overlap
-                        query_terms = query_lower.split()
-                        scores = []
-                        for _, row in faiss_results.iterrows():
-                            title = str(row['title']).lower() if not pd.isna(row['title']) else ""
-                            score = sum(1 for term in query_terms if term in title)
-                            scores.append((row, score))
-                        
-                        # Sort by score (descending) and take top_k
-                        sorted_results = sorted(scores, key=lambda x: x[1], reverse=True)
-                        
-                        # Convert to Product objects
-                        results = []
-                        for row, _ in sorted_results[:top_k]:
-                            results.append(Product(
-                                asin=row['parent_asin'],
-                                title=row['title'],
-                                price=float(row['price']),
-                                rating=float(row['average_rating']),
-                                categories=self._parse_list(row['categories']),
-                                features=self._parse_list(row['features']),
-                                description=str(row['description']) if not pd.isna(row['description']) else None
-                            ))
-                        
-                        if results:
-                            logger.info(f"Returning {len(results)} results from FAISS search")
-                            return results
-                except Exception as e:
-                    logger.warning(f"FAISS search failed, falling back to keyword search: {e}")
-            
-            # 3. Fallback to keyword search
-            logger.info("Falling back to keyword search")
-            query_terms = query_lower.split()
+            # 2) Rerank via CrossEncoder
+            if not candidates.empty:
+                logger.info(f"Reranking {len(candidates)} FAISS candidates")
+                titles = candidates["title"].fillna("").tolist()
+                pairs  = list(zip([query] * len(titles), titles))
+                scores = self.reranker.predict(pairs)
+                candidates = candidates.assign(_score=scores)
+                candidates = candidates.sort_values("_score", ascending=False).head(top_k)
+
+                return [
+                    Product(
+                        asin=row["parent_asin"],
+                        title=row["title"],
+                        price=float(row["price"]),
+                        rating=float(row["average_rating"]),
+                        categories=self._parse_list(row["categories"]),
+                        features=self._parse_list(row["features"]),
+                        description=(str(row["description"]) if not pd.isna(row["description"]) else None)
+                    ).to_dict()
+                    for _, row in candidates.iterrows()
+                ]
+
+            # 3) Fallback to simple keyword match in titles
+            logger.info("FAISS returned no candidates above rating threshold, falling back to keyword search")
+            keywords = query_lower.split()
             results = []
-            
             for _, row in self.df.iterrows():
-                title = str(row['title']).lower() if not pd.isna(row['title']) else ""
-                if any(term in title for term in query_terms) and float(row['average_rating']) >= min_rating:
+                title = str(row["title"]).lower() if not pd.isna(row["title"]) else ""
+                if all(term in title for term in keywords) and float(row["average_rating"]) >= min_rating:
                     results.append(Product(
-                        asin=row['parent_asin'],
-                        title=row['title'],
-                        price=float(row['price']),
-                        rating=float(row['average_rating']),
-                        categories=self._parse_list(row['categories']),
-                        features=self._parse_list(row['features']),
-                        description=None
-                    ))
+                        asin=row["parent_asin"],
+                        title=row["title"],
+                        price=float(row["price"]),
+                        rating=float(row["average_rating"]),
+                        categories=self._parse_list(row["categories"]),
+                        features=self._parse_list(row["features"]),
+                        description=(str(row["description"]) if not pd.isna(row["description"]) else None)
+                    ).to_dict())
                     if len(results) >= top_k:
                         break
-            
-            logger.info(f"Returning {len(results)} results from keyword search")
+
+            logger.info(f"Keyword search found {len(results)} results")
             return results
+
         except Exception as e:
-            logger.error(f"Error during search for query '{query}': {e}")
+            logger.error(f"Error during dynamic search for '{query}': {e}")
             return []
     
     def get_by_asin(self, asin: str):

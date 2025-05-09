@@ -14,4 +14,4 @@ ENV ORDER_SERVICE_URL=${ORDER_SERVICE_URL}
 
 EXPOSE 8080
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app", "--workers", "2"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app", "--workers", "1"]
