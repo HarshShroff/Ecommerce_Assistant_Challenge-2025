@@ -1,1 +1,5 @@
-Story,Task,Estimate min (hr),Estimate max (hr),Actual,Comment
+Story  , Task                       , Estimate min (hr), Estimate max (hr), Actual, Comment
+ee360d9, Initial project setup      ,               0.5,                 1,    1  , First commit: repo                           , requirements           , initial structure
+e7952ea, Working mark1 (core logic) ,               2  ,                 4,    3  , Implemented core services: product/order/chat, basic endpoints        , data loading
+51a7775, Add Perplexity API         ,               1  ,                 2,    1.5, Integrated Perplexity API                    , enhanced product search, handled API errors
+c397235, Add session mgmt & bugfixes,               1  ,                 2,    1.5, Added session management                     , fixed session bugs     , improved multi-turn order queries
