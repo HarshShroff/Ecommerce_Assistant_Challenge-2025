@@ -44,7 +44,7 @@ ORDER_SERVICE_URL   = os.getenv("ORDER_SERVICE_URL",   "http://order-service:808
 # small‑talk and control keywords
 GREETINGS = {"hi","hello","hey","hiya","good morning","good afternoon","good evening"}
 FAREWELLS = {"bye","goodbye","see you","farewell"}
-THANKS    = {"thanks","thank you","thx","ty"}
+THANKS    = {"thanks","thank you","thx","ty", "no thanks", "no thank you"}
 CANCELS   = {"cancel","nevermind","never mind","stop"}
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -119,7 +119,7 @@ class Chat(Resource):
 
         # ─── A) GLOBAL CANCEL ───────────────────────────────────────────────────────
         if clean in CANCELS:
-            session.clear()
+            SESSION_MGR.end_session(sid)
             return _reply(session, "No problem—let’s start fresh. What can I help with?")
 
         # ─── B) SMALL‑TALK ───────────────────────────────────────────────────────────

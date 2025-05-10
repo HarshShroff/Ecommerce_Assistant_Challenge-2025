@@ -14,13 +14,13 @@ class PerplexityClient:
             logger.warning("No Perplexity API key provided. Some features will be limited.")
         self.base_url = "https://api.perplexity.ai/chat/completions"
         
-    def search(self, query: str, model: str = "sonar-small") -> Dict[str, Any]:
+    def search(self, query: str, model: str = "sonar") -> Dict[str, Any]:
         """
         Perform a search using Perplexity API
         
         Args:
             query: The search query
-            model: The model to use (sonar-small, sonar-medium, sonar-pro)
+            model: The model to use
             
         Returns:
             Dict containing the search results and sources

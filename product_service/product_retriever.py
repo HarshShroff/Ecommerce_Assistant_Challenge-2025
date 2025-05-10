@@ -13,17 +13,17 @@ logger = logging.getLogger(__name__)
 class Product(BaseModel):
     asin: str
     title: str
-    price: float
+    price: Optional[float] = None
     rating: float
     categories: List[str]
     features: Optional[List[str]] = Field(default_factory=list)
     description: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "asin": self.asin,
             "title": self.title,
-            "price": self.price,
+            "price": self.price if self.price is not None else "N/A",
             "rating": self.rating,
             "categories": self.categories,
             "features": self.features[:3] if self.features else [],
