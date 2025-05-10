@@ -65,7 +65,7 @@ def _fetch_customer_orders(customer_id: str):
         return resp.json()
     except Exception as e:
         logger.error(f"Order service error: {e}")
-        return "Sorry, I couldn’t fetch your orders right now."
+        return f"Sorry, I couldn’t fetch your orders right now. Customer ID: {customer_id} not found!"
 
 def _reply(session: Session, text: str, sources=None):
     session.add_to_history("bot", text)

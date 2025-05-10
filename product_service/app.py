@@ -58,40 +58,44 @@ class ProductSearch(Resource):
         if not data or 'query' not in data:
             return jsonify({"error": "Missing query parameter"}), 400
         
-        query = data.get('query')
-        top_k = data.get('top_k', 5)
-        min_rating = data.get('min_rating', 4.0)
-        
-        cache_key = f"{query}-{top_k}-{min_rating}"
-        
-        if cache_key in cache:
-            logger.info(f"Cache hit for query: {query}")
-            return jsonify(cache[cache_key])
-        
-        logger.info(f"Processing search query: {query}")
-        results = retriever.search(
-            query=query,
-            top_k=top_k,
-            min_rating=min_rating
-        )
-        
-        response = []
-        for item in results:
-            if hasattr(item, "to_dict"):
-                # Product instance
-                response.append(item.to_dict())
-            elif isinstance(item, dict):
-                # Already a dict
-                response.append(item)
-            else:
-                # Fallback: try its __dict__
-                try:
-                    response.append(item.__dict__)
-                except Exception:
-                    # As last resort, string‑ify
-                    response.append({"value": str(item)})
+        try:
+            query = data.get('query')
+            top_k = data.get('top_k', 5)
+            min_rating = data.get('min_rating', 4.0)
+            
+            cache_key = f"{query}-{top_k}-{min_rating}"
+            
+            if cache_key in cache:
+                logger.info(f"Cache hit for query: {query}")
+                return jsonify(cache[cache_key])
+            
+            logger.info(f"Processing search query: {query}")
+            results = retriever.search(
+                query=query,
+                top_k=top_k,
+                min_rating=min_rating
+            )
+            
+            response = []
+            for item in results:
+                if hasattr(item, "to_dict"):
+                    # Product instance
+                    response.append(item.to_dict())
+                elif isinstance(item, dict):
+                    # Already a dict
+                    response.append(item)
+                else:
+                    # Fallback: try its __dict__
+                    try:
+                        response.append(item.__dict__)
+                    except Exception:
+                        # As last resort, string‑ify
+                        response.append({"value": str(item)})
 
-        return jsonify(response)
+            return jsonify(response)
+        except Exception as e:
+            logger.exception("Error during product search")
+            return jsonify({"error": "Internal server error"}), 500
 
 class Product(Resource):
     def get(self, asin):
@@ -113,11 +117,37 @@ class Product(Resource):
         product = retriever.get_by_asin(asin)
         if not product:
             return jsonify({"error": "Product not found"}), 404
-        return jsonify(product.to_dict())
+        try:
+            return jsonify(product.to_dict())
+        except Exception as e:
+            logger.exception("Error during get product")
+            return jsonify({"error": "Internal server error"}), 500
 
 api.add_resource(Health, '/health')
 api.add_resource(ProductSearch, '/search')
 api.add_resource(Product, '/product/<string:asin>')
+
+@app.errorhandler(400)
+def bad_request(error):
+    """
+    Error handler for bad requests.
+    ---
+    responses:
+      400:
+        description: Bad request.
+    """
+    return jsonify({"error": "Bad request"}), 400
+
+@app.errorhandler(404)
+def not_found(error):
+    """
+    Error handler for not found errors.
+    ---
+    responses:
+      404:
+        description: Resource not found.
+    """
+    return jsonify({"error": "Resource not found"}), 404
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
