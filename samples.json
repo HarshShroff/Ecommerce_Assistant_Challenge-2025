@@ -1,0 +1,44 @@
+{
+    "Product Dataset Queries": [{
+            "question": "What are the top 5 highly-rated guitar products?",
+            "response": "Here are some of the top-rated guitar products you might love:\n\n*   The Ernie Ball Mondo Slinky Nickelwound Electric Guitar Strings is a popular choice with a 4.8-star rating. At just $6.99, it’s a great pick for electric guitar players.\n*   If you need a reliable stand, the Amazon Basics Adjustable Guitar Folding A-Frame Stand also has a 4.8-star rating and is priced at $17.75.\n*   For acoustic players, the D'Addario Guitar Strings - Phosphor Bronze is highly rated at 4.7 stars and costs $10.99."
+        },
+        {
+            "question": "What’s a good product for thin guitar strings?",
+            "response": "The D'Addario Guitar Strings - Phosphor Bronze Acoustic Guitar Strings for $10.99 might be just what you're looking for. They're specifically designed to be compatible with thin strings, offering a warm, balanced tone that's perfect for acoustic guitars. They have a solid rating of 4.7 stars with over 60,000 reviews."
+        },
+        {
+            "question": "Is the BOYA BYM1 Microphone good for a cello?",
+            "response": "The Boya BY-M1 is an omnidirectional lavalier microphone primarily designed for capturing speech in video recordings. Its omnidirectional pickup pattern captures sound from all directions, making it suitable for interviews, presentations, and general voice recording. While it can record musical instruments, its design and frequency response are optimized for vocals rather than the dynamic range and nuances of musical instruments."
+        },
+        {
+            "question": "What is the average price of a guitar?",
+            "response": "I cannot provide the average price of a guitar."
+        },
+        {
+            "question": "Suggest me a good cello for beginners",
+            "response": "I am unable to provide a recommendation for a cello."
+        }
+    ],
+    "Order Data Queries": [{
+            "question": "What are the details of my last order?",
+            "response": "Sure, I can help with that! Could you please provide your Customer ID?"
+        },
+        {
+            "question": "Fetch 5 most recent high-priority orders.",
+            "response": "Here are the 5 most recent high-priority orders I found for you:\n1.  On December 30, 2018, Car Pillow & Neck Rest was ordered for $231 with a shipping cost of $14.20. (Customer ID: 36086).\n2.  Also on December 30, 2018, Car Seat Covers were ordered for $114 with a shipping cost of $1.10. (Customer ID: 35081).\n3.  On the same day, Tyre was ordered for $250 with a shipping cost of $13.30. (Customer ID: 26306)."
+        },
+        {
+            "question": "What are the details of my most recent order?",
+            "response": "Please provide your Customer ID to retrieve your order details."
+        },
+        {
+            "question": "What is the status of my car body covers?",
+            "response": "Please provide your Customer ID to check the status of your car body cover order."
+        },
+        {
+            "question": "What is the status of my cell-phone order?",
+            "response": "Please provide your Customer ID to retrieve your cell-phone order."
+        }
+    ]
+}

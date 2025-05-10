@@ -25,6 +25,7 @@ services:
     environment:
       - PRODUCT_SERVICE_URL=http://product-service:8080
       - ORDER_SERVICE_URL=http://order-service:8080
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
     depends_on:
       - product-service
       - order-service

@@ -1,179 +1,189 @@
-# chat_service/rag_handler.py
 import logging
+import re
 from datetime import datetime
+
+from perplexity_client import PerplexityClient
 
 logger = logging.getLogger(__name__)
 
 class ChatHandler:
-    def __init__(self):
+    def __init__(self, perplexity_api_key=None):
+        # Always set attribute, even if None
+        self.perplexity = None
+        if perplexity_api_key:
+            try:
+                self.perplexity = PerplexityClient(api_key=perplexity_api_key)
+            except Exception as e:
+                logger.error(f"Failed to initialize PerplexityClient: {e}")
+
+        # Analytics response templates
         self.analytics_templates = {
             "sales_by_category": "Here’s the total sales by category:\n\n{lines}",
             "profit_by_gender":   "Total profit by customer gender:\n\n{lines}",
-            "shipping_summary":   "Shipping cost summary:\n\nAverage: ${average:.2f}\nMin: ${min:.2f}\nMax: ${max:.2f}",
-            "high_profit":        "Here are high-profit products:\n\n{lines}"
-        }
-        self.product_templates = {
-            "no_results": "I couldn't find any products matching your query. Could you try with different keywords?",
-            "single_result": "I found this product for you: {title}. It's priced at ${price} and has a rating of {rating}/5 stars. {features}",
-            "multiple_results": "Here are some products that match your search:\n\n{products}\n\nWould you like more details on any of these?"
-        }
-        self.order_templates = {
-            "no_orders": "I couldn't find any orders for customer ID {customer_id}.",
-            "single_order": "Your most recent order was placed on {date} for '{product}'. The total amount was ${sales:.2f}, with a shipping cost of ${shipping:.2f}. The order priority is '{priority}'.",
-            "multiple_orders": "You have {count} orders. Your most recent order was placed on {date} for '{product}'. The total amount was ${sales:.2f}, with a shipping cost of ${shipping:.2f}. Want details on other orders?"
+            "shipping_summary": ("Shipping cost summary:\n\n"
+                                 "Average: ${average:.2f}\n"
+                                 "Min: ${min:.2f}\n"
+                                 "Max: ${max:.2f}"),
+            "high_profit":        "Here are the high-profit products:\n\n{lines}"
         }
 
-    # ──────────────────────────────────────────────────────────────────────────────
-    # Analytics responses
-    # ──────────────────────────────────────────────────────────────────────────────
+        # Order templates
+        self.order_templates = {
+            "no_orders":      "I couldn't find any orders under Customer ID {customer_id}.",
+            "single_order": (
+                "Here’s what I found for your most recent order:\n"
+                "• Date: {date}\n"
+                "• Item: {product}\n"
+                "• Total: ${sales:.2f} (Shipping: ${shipping:.2f})\n"
+                "Is there anything else you’d like to know?"
+            ),
+            "multiple_orders": (
+                "You have {count} orders. Most recent:\n"
+                "• Date: {date}\n"
+                "• Item: {product}\n"
+                "• Total: ${sales:.2f} (Shipping: ${shipping:.2f})\n"
+                "Would you like details on the others?"
+            )
+        }
 
     def generate_sales_by_category(self, data):
-        header = "Here’s the total sales by category:"
-        lines = []
-        for d in data:
-            cat = d.get('Product_Category', 'Unknown')
-            sales = d.get('Sales', 0.0)
-            lines.append(f"- {cat}: ${sales:.2f}")
-        return "\n".join([header] + lines)
+        lines = "\n".join(f"{d['Product_Category']}: ${d['Sales']:.2f}" for d in data)
+        return self.analytics_templates["sales_by_category"].format(lines=lines)
 
     def generate_profit_by_gender(self, data):
-        header = "Total profit by customer gender:"
-        lines = []
-        for d in data:
-            gender = d.get('Gender', 'Unknown')
-            profit = d.get('Profit', 0.0)
-            lines.append(f"- {gender}: ${profit:.2f}")
-        return "\n".join([header] + lines)
+        lines = "\n".join(f"{d['Gender']}: ${d['Profit']:.2f}" for d in data)
+        return self.analytics_templates["profit_by_gender"].format(lines=lines)
 
     def generate_shipping_summary(self, summary):
-        return (
-            "Shipping cost summary:\n"
-            f"- Average: ${summary['average_shipping_cost']:.2f}\n"
-            f"- Minimum: ${summary['min_shipping_cost']:.2f}\n"
-            f"- Maximum: ${summary['max_shipping_cost']:.2f}"
+        return self.analytics_templates["shipping_summary"].format(
+            average=summary["average_shipping_cost"],
+            min=summary["min_shipping_cost"],
+            max=summary["max_shipping_cost"]
         )
 
     def generate_high_profit_products(self, data):
-        header = "Here are some high‑profit products:"
         lines = []
         for i, d in enumerate(data[:5], start=1):
-            name = d.get('Product') or d.get('Product_Category', 'Unknown')
-            profit = d.get('Profit', 0.0)
-            lines.append(f"{i}. {name} — Profit: ${profit:.2f}")
-        return "\n".join([header] + lines)
-
-    # ──────────────────────────────────────────────────────────────────────────────
-    # Product search response
-    # ──────────────────────────────────────────────────────────────────────────────
+            lines.append(f"{i}. {d.get('Product') or d.get('Product_Category')} — Profit: ${d['Profit']:.2f}")
+        return self.analytics_templates["high_profit"].format(lines="\n".join(lines))
 
     def generate_product_response(self, products, query):
-        if not products:
-            return "I couldn't find any products matching your query. Could you try different keywords?"
+        # Evaluate "Is X good for Y?" queries
+        eval_match = re.match(
+            r"is (?:the )?(?P<product>.+?) good for (?P<target>.+?)(?:\?|$)",
+            query, flags=re.IGNORECASE
+        )
+        if eval_match and products:
+            prod = products[0]
+            target = eval_match.group('target').strip()
+            # Prepare prompt for Perplexity
+            desc = prod.get('description','')
+            feats = prod.get('features', [])
+            feat_text = '; '.join(feats[:3]) if feats else ''
+            prompt = (
+                f"Product: {prod.get('title')}\n"
+                f"Description: {desc}\n"
+                f"Key Features: {feat_text}\n"
+                f"Question: Is this product good for {target}? Explain briefly."
+            )
+            if self.perplexity:
+                try:
+                    insight = self.perplexity.search(prompt).get('content')
+                    if insight:
+                        return insight
+                except Exception as e:
+                    logger.error(f"Perplexity evaluation error: {e}")
+            # Fallback
+            return (
+                f"I don’t have a detailed evaluation right now, but here’s the product info:\n"
+                f"• {prod.get('title')} — ${prod.get('price',0):.2f}, Rating: {prod.get('rating',0):.1f}/5"
+            )
 
+        # Standard search results
+        if not products:
+            return "I couldn’t find any products matching that. Could you try different keywords?"
+
+        # Single product response
         if len(products) == 1:
             p = products[0]
-            title = p.get('title', 'N/A')
-            price = p.get('price', 0.0)
-            rating = p.get('rating', 0.0)
-            feat = p.get('features') or []
-            feat_txt = ""
-            if feat:
-                feat_txt = " Key features: " + "; ".join(feat[:3]) + "."
+            feats = p.get('features', [])
+            feat_text = ' '.join(feats[:2]) if feats else ''
             return (
-                f"I found one product for '{query}': {title} priced at "
-                f"${price:.2f} with a {rating:.1f}/5 star rating.{feat_txt}"
+                f"Here’s one result: {p.get('title')} for ${p.get('price',0):.2f} "
+                f"(Rating: {p.get('rating',0):.1f}/5). {feat_text}"
             )
 
-        header = f"Here are the top {min(len(products), 5)} results for '{query}':"
+        # Multiple products
         lines = []
-        prices = []
         for i, p in enumerate(products[:5], start=1):
-            title = p.get('title', 'N/A')
-            price = p.get('price')
+            lines.append(
+                f"{i}. {p.get('title')} — ${p.get('price',0):.2f} (Rating: {p.get('rating',0):.1f}/5)"
+            )
+        resp = "Here are some products that match your search:\n\n" + "\n".join(lines)
+        # Optional market insight
+        if self.perplexity:
             try:
-                price_f = float(price)
-                prices.append(price_f)
-                price_str = f"${price_f:.2f}"
+                insight = self._market_insights(query)
+                if insight:
+                    resp += f"\n\nMarket Insights: {insight}"
             except Exception:
-                price_str = "N/A"
-            rating = p.get('rating', 0.0)
-            lines.append(f"{i}. {title} — {price_str} (Rating: {rating:.1f}/5)")
+                pass
+        return resp
 
-        price_summary = ""
-        if prices:
-            avg = sum(prices) / len(prices)
-            price_summary = f"\nThe average price of these is ${avg:.2f}."
-
-        return "\n".join([header] + lines) + price_summary
-
-    # ──────────────────────────────────────────────────────────────────────────────
-    # General order response
-    # ──────────────────────────────────────────────────────────────────────────────
+    def _market_insights(self, query):
+        prompt = (
+            f"Provide a brief market overview for products matching '{query}', "
+            "including trends and price ranges in two sentences."
+        )
+        return self.perplexity.search(prompt).get('content','') if self.perplexity else ''
 
     def generate_order_response(self, order_data, query):
-        cid = order_data.get('customer_id', 'Unknown')
+        cid = order_data.get('customer_id')
         orders = order_data.get('orders', [])
         if not orders:
-            return f"I couldn't find any orders for Customer ID {cid}."
+            return f"I couldn't find any orders under Customer ID {cid}."
 
+        most_recent = orders[0]
         try:
-            orders_sorted = sorted(
-                orders,
-                key=lambda o: datetime.strptime(o.get('Order_Date', ''), '%Y-%m-%d'),
-                reverse=True
-            )
-        except Exception:
-            orders_sorted = orders
+            dt = datetime.strptime(most_recent['Order_Date'], '%Y-%m-%d')
+            date_str = dt.strftime('%B %d, %Y')
+        except:
+            date_str = most_recent['Order_Date']
+        sales = float(most_recent.get('Sales',0))
+        ship  = float(most_recent.get('Shipping_Cost',0))
+        prod  = most_recent.get('Product','item')
 
-        most_recent = orders_sorted[0]
-        date_str = most_recent.get('Order_Date', '')
-        try:
-            date_fmt = datetime.strptime(date_str, '%Y-%m-%d').strftime('%B %d, %Y')
-        except Exception:
-            date_fmt = date_str
-
-        product = most_recent.get('Product') or most_recent.get('Product_Category', 'Unknown')
-        sales = most_recent.get('Sales', 0.0)
-        shipping = most_recent.get('Shipping_Cost', 0.0)
-        priority = most_recent.get('Order_Priority', 'N/A')
-
-        if len(orders_sorted) == 1:
+        if len(orders) == 1:
             return (
-                f"Your only order (Customer ID {cid}) was on {date_fmt}: "
-                f"{product} for ${sales:.2f} (shipping ${shipping:.2f}), priority: {priority}."
+                f"Here’s what I found for your most recent order:\n"
+                f"• Date: {date_str}\n"
+                f"• Item: {prod}\n"
+                f"• Total: ${sales:.2f} (Shipping: ${ship:.2f})\n"
+                f"Is there anything else you’d like to know?"
             )
-
         return (
-            f"You have {len(orders_sorted)} orders. Your most recent was on {date_fmt}: "
-            f"{product} for ${sales:.2f} (shipping ${shipping:.2f}), priority: {priority}. "
-            "Let me know if you'd like details on any other order!"
+            f"You have {len(orders)} orders. Most recent:\n"
+            f"• Date: {date_str}\n"
+            f"• Item: {prod}\n"
+            f"• Total: ${sales:.2f} (Shipping: ${ship:.2f})\n"
+            f"Would you like details on the others?"
         )
-
-    # ──────────────────────────────────────────────────────────────────────────────
-    # Priority‑orders response
-    # ──────────────────────────────────────────────────────────────────────────────
 
     def generate_priority_orders_response(self, orders, priority_level):
         if not orders:
-            return f"I couldn't find any {priority_level.lower()}‑priority orders."
-
-        header = f"Here are the {len(orders)} most recent {priority_level.lower()}‑priority orders:"
-        lines = []
-        for i, o in enumerate(orders, start=1):
-            date_str = o.get('Order_Date', '')
+            return f"I couldn't find any {priority_level.lower()}-priority orders right now."
+        lines = [f"Here are the {len(orders)} most recent {priority_level.lower()}-priority orders:"]
+        for i, o in enumerate(orders[:5], start=1):
             try:
-                date_fmt = datetime.strptime(date_str, '%Y-%m-%d').strftime('%B %d, %Y')
-            except Exception:
-                date_fmt = date_str
-
-            product = o.get('Product') or o.get('Product_Category', 'Unknown')
-            sales = o.get('Sales', 0.0)
-            shipping = o.get('Shipping_Cost', 0.0)
-            cid = o.get('Customer_Id', 'N/A')
-
+                d = datetime.strptime(o['Order_Date'],'%Y-%m-%d').strftime('%B %d, %Y')
+            except:
+                d = o['Order_Date']
+            prod = o.get('Product') or o.get('Product_Category')
+            sales = float(o.get('Sales',0))
+            ship  = float(o.get('Shipping_Cost',0))
+            cid   = o.get('Customer_Id','N/A')
             lines.append(
-                f"{i}. {date_fmt} — {product} for ${sales:.2f} "
-                f"(shipping ${shipping:.2f}; Customer ID: {cid})"
+                f"{i}. On {d}, {prod} for ${sales:.2f} plus ${ship:.2f} shipping. (Customer ID: {cid})"
             )
-
-        return "\n".join([header] + lines)
+        lines.append("\nLet me know if you'd like more details!")
+        return "\n".join(lines)
